@@ -24,3 +24,27 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Thin scrollbars that match the page */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--foreground-20, rgba(128, 128, 128, 0.2)) transparent;
+}
+
+*::-webkit-scrollbar {
+  height: 4px;
+  width: 4px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.25);
+  border-radius: 2px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 128, 0.4);
+}
