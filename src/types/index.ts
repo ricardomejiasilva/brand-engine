@@ -1,8 +1,23 @@
+export type TextPosition = "upper-left" | "upper-right" | "lower-left" | "lower-right";
+export type ProductAlignment = "left" | "center" | "right";
+export type TextStyle = "italic bold" | "italic" | "bold" | "normal";
+
+export interface LayoutSpec {
+  split_position: number;
+  split_skew: number;
+  text_position: TextPosition;
+  product_alignment: ProductAlignment;
+  product_scale: number;
+  font_size: number;
+}
+
 export interface BrandParameters {
   id: string;
   brand_name: string;
   font_family: string;
   primary_color: string;
+  secondary_color: string;
+  text_style: TextStyle;
   background_vibe_description: string;
   surface_material: string;
   custom_parameters: Record<string, string>;

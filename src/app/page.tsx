@@ -26,6 +26,8 @@ export default function Dashboard() {
     brand_name: "",
     font_family: "",
     primary_color: "#000000",
+    secondary_color: "#ffffff",
+    text_style: "italic bold" as string,
     background_vibe_description: "",
     surface_material: "",
   });
@@ -53,6 +55,8 @@ export default function Dashboard() {
       brand_name: "",
       font_family: "",
       primary_color: "#000000",
+      secondary_color: "#ffffff",
+      text_style: "italic bold",
       background_vibe_description: "",
       surface_material: "",
     });
@@ -66,6 +70,8 @@ export default function Dashboard() {
       brand_name: brand.brand_name,
       font_family: brand.font_family,
       primary_color: brand.primary_color,
+      secondary_color: brand.secondary_color || "#ffffff",
+      text_style: brand.text_style ?? "italic bold",
       background_vibe_description: brand.background_vibe_description,
       surface_material: brand.surface_material,
     });
@@ -230,6 +236,10 @@ export default function Dashboard() {
                             className="inline-block w-3 h-3 rounded-full border border-foreground/10"
                             style={{ backgroundColor: b.primary_color }}
                           />
+                          <span
+                            className="inline-block w-3 h-3 rounded-full border border-foreground/10"
+                            style={{ backgroundColor: b.secondary_color }}
+                          />
                           <span className="font-medium text-sm text-foreground">
                             {b.brand_name}
                           </span>
@@ -331,6 +341,28 @@ export default function Dashboard() {
                   </div>
                   <div>
                     <label className="block text-xs text-foreground/50 mb-1">
+                      Secondary Color
+                    </label>
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="color"
+                        value={brandForm.secondary_color}
+                        onChange={(e) =>
+                          setBrandForm({ ...brandForm, secondary_color: e.target.value })
+                        }
+                        className="h-9 w-9 rounded border border-foreground/15 bg-background cursor-pointer"
+                      />
+                      <input
+                        value={brandForm.secondary_color}
+                        onChange={(e) =>
+                          setBrandForm({ ...brandForm, secondary_color: e.target.value })
+                        }
+                        className="flex-1 rounded-lg border border-foreground/15 bg-background px-3 py-2 text-sm text-foreground font-mono focus:border-foreground/40 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-foreground/50 mb-1">
                       Surface Material
                     </label>
                     <input
@@ -341,6 +373,23 @@ export default function Dashboard() {
                       placeholder="e.g. reclaimed wood"
                       className="w-full rounded-lg border border-foreground/15 bg-background px-3 py-2 text-sm text-foreground placeholder:text-foreground/30 focus:border-foreground/40 focus:outline-none"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-foreground/50 mb-1">
+                      Text Style
+                    </label>
+                    <select
+                      value={brandForm.text_style}
+                      onChange={(e) =>
+                        setBrandForm({ ...brandForm, text_style: e.target.value })
+                      }
+                      className="w-full rounded-lg border border-foreground/15 bg-background px-3 py-2 text-sm text-foreground focus:border-foreground/40 focus:outline-none"
+                    >
+                      <option value="italic bold">Italic Bold</option>
+                      <option value="italic">Italic</option>
+                      <option value="bold">Bold</option>
+                      <option value="normal">Normal</option>
+                    </select>
                   </div>
                   <div className="sm:col-span-2">
                     <label className="block text-xs text-foreground/50 mb-1">
@@ -712,7 +761,7 @@ export default function Dashboard() {
               {/* AI Background */}
               <div className="rounded-xl border border-foreground/10 overflow-hidden">
                 <div className="bg-foreground/5 px-4 py-2.5 text-xs font-medium text-foreground/60 uppercase tracking-wider">
-                  AI Background
+                  Brand Background
                 </div>
                 <div className="p-4 flex items-center justify-center bg-white min-h-[300px]">
                   {result.backgroundImageBase64 && (

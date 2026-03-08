@@ -1,10 +1,14 @@
 import sharp from "sharp";
 import { createCanvas, GlobalFonts } from "@napi-rs/canvas";
 import path from "path";
-import { BrandParameters } from "@/types";
+import {
+  BrandParameters,
+  LayoutSpec,
+  TextPosition,
+  ProductAlignment,
+} from "@/types";
 
-const OUTPUT_WIDTH = 1200;
-const OUTPUT_HEIGHT = 800;
+const OUTPUT_SIZE = 1409;
 
 function registerBrandFont(brand: BrandParameters): string {
   const fontPath = path.join(
@@ -18,28 +22,108 @@ function registerBrandFont(brand: BrandParameters): string {
     GlobalFonts.registerFromPath(fontPath, brand.font_family);
     return brand.font_family;
   } catch {
-    // Fall back to the font family name directly (system font)
     return brand.font_family;
+  }
+}
+
+async function removeWhiteBackground(imageBuffer: Buffer): Promise<Buffer> {
+  const { data, info } = await sharp(imageBuffer)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  const { width, height, channels } = info;
+  const threshold = 235;
+  const softEdge = 20;
+
+  for (let i = 0; i < data.length; i += channels) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    const minChannel = Math.min(r, g, b);
+
+    if (minChannel >= threshold) {
+      data[i + 3] = 0;
+    } else if (minChannel >= threshold - softEdge) {
+      const opacity = Math.round(
+        ((threshold - minChannel) / softEdge) * 255
+      );
+      data[i + 3] = Math.min(data[i + 3], opacity);
+    }
+  }
+
+  return sharp(data, { raw: { width, height, channels } }).png().toBuffer();
+}
+
+function renderBrandedBackground(
+  brand: BrandParameters,
+  layout: LayoutSpec
+): Buffer {
+  const canvas = createCanvas(OUTPUT_SIZE, OUTPUT_SIZE);
+  const ctx = canvas.getContext("2d");
+
+  const split = layout.split_position / 100;
+  const skew = (layout.split_skew ?? 0) / 100;
+
+  ctx.fillStyle = brand.secondary_color;
+  ctx.fillRect(0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
+
+  ctx.fillStyle = brand.primary_color;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(OUTPUT_SIZE * (split + skew), 0);
+  ctx.lineTo(OUTPUT_SIZE * (split - skew), OUTPUT_SIZE);
+  ctx.lineTo(0, OUTPUT_SIZE);
+  ctx.closePath();
+  ctx.fill();
+
+  return Buffer.from(canvas.toBuffer("image/png"));
+}
+
+function getTextCoords(
+  position: TextPosition,
+  lineCount: number,
+  lineHeight: number
+): { x: number; y: number; align: CanvasTextAlign } {
+  const margin = 70;
+
+  switch (position) {
+    case "upper-right":
+      return { x: OUTPUT_SIZE - margin, y: margin, align: "right" };
+    case "lower-left":
+      return {
+        x: margin,
+        y: OUTPUT_SIZE - margin - lineCount * lineHeight,
+        align: "left",
+      };
+    case "lower-right":
+      return {
+        x: OUTPUT_SIZE - margin,
+        y: OUTPUT_SIZE - margin - lineCount * lineHeight,
+        align: "right",
+      };
+    case "upper-left":
+    default:
+      return { x: margin, y: margin, align: "left" };
   }
 }
 
 function renderTextOverlay(
   text: string,
   brand: BrandParameters,
+  layout: LayoutSpec,
   fontFamily: string
 ): Buffer {
-  const canvas = createCanvas(OUTPUT_WIDTH, OUTPUT_HEIGHT);
+  const canvas = createCanvas(OUTPUT_SIZE, OUTPUT_SIZE);
   const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
 
-  // Transparent background
-  ctx.clearRect(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
-
-  const fontSize = 42;
-  ctx.font = `bold ${fontSize}px "${fontFamily}", sans-serif`;
-  ctx.textAlign = "center";
+  const fontSize = layout.font_size;
+  const style = brand.text_style ?? "italic bold";
+  ctx.font = `${style} ${fontSize}px "${fontFamily}", serif`;
   ctx.textBaseline = "top";
 
-  const maxWidth = OUTPUT_WIDTH - 120;
+  const maxWidth = OUTPUT_SIZE * 0.4;
   const words = text.split(" ");
   const lines: string[] = [];
   let currentLine = "";
@@ -56,40 +140,38 @@ function renderTextOverlay(
   }
   if (currentLine) lines.push(currentLine);
 
-  const lineHeight = fontSize * 1.3;
-  const totalTextHeight = lines.length * lineHeight;
-  const paddingY = 20;
-  const paddingX = 40;
-  const bannerHeight = totalTextHeight + paddingY * 2;
-  const bannerY = OUTPUT_HEIGHT - bannerHeight - 40;
+  const lineHeight = fontSize * 1.4;
+  const { x, y, align } = getTextCoords(
+    layout.text_position,
+    lines.length,
+    lineHeight
+  );
+  ctx.textAlign = align;
 
-  // Semi-transparent banner background
-  ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
-  const bannerWidth = maxWidth + paddingX * 2;
-  const bannerX = (OUTPUT_WIDTH - bannerWidth) / 2;
-  const radius = 12;
-
-  ctx.beginPath();
-  ctx.moveTo(bannerX + radius, bannerY);
-  ctx.lineTo(bannerX + bannerWidth - radius, bannerY);
-  ctx.quadraticCurveTo(bannerX + bannerWidth, bannerY, bannerX + bannerWidth, bannerY + radius);
-  ctx.lineTo(bannerX + bannerWidth, bannerY + bannerHeight - radius);
-  ctx.quadraticCurveTo(bannerX + bannerWidth, bannerY + bannerHeight, bannerX + bannerWidth - radius, bannerY + bannerHeight);
-  ctx.lineTo(bannerX + radius, bannerY + bannerHeight);
-  ctx.quadraticCurveTo(bannerX, bannerY + bannerHeight, bannerX, bannerY + bannerHeight - radius);
-  ctx.lineTo(bannerX, bannerY + radius);
-  ctx.quadraticCurveTo(bannerX, bannerY, bannerX + radius, bannerY);
-  ctx.closePath();
-  ctx.fill();
-
-  // Draw text
-  ctx.fillStyle = brand.primary_color;
-  const textStartY = bannerY + paddingY;
+  ctx.fillStyle = brand.secondary_color;
   for (let i = 0; i < lines.length; i++) {
-    ctx.fillText(lines[i], OUTPUT_WIDTH / 2, textStartY + i * lineHeight);
+    ctx.fillText(lines[i], x, y + i * lineHeight);
   }
 
   return Buffer.from(canvas.toBuffer("image/png"));
+}
+
+function getProductLeft(
+  alignment: ProductAlignment,
+  productW: number,
+  split: number
+): number {
+  const splitPx = OUTPUT_SIZE * (split / 100);
+
+  switch (alignment) {
+    case "left":
+      return Math.round(splitPx / 2 - productW / 2);
+    case "center":
+      return Math.round((OUTPUT_SIZE - productW) / 2);
+    case "right":
+    default:
+      return Math.round(splitPx + (OUTPUT_SIZE - splitPx) / 2 - productW / 2);
+  }
 }
 
 export interface CompositeResult {
@@ -99,11 +181,10 @@ export interface CompositeResult {
 
 export async function compositeImage(
   productImageUrl: string,
-  backgroundBuffer: Buffer,
   marketingCopy: string,
-  brand: BrandParameters
+  brand: BrandParameters,
+  layout: LayoutSpec
 ): Promise<CompositeResult> {
-  // 1. Fetch and process the product image
   const productResponse = await fetch(productImageUrl);
   if (!productResponse.ok) {
     throw new Error(`Failed to fetch product image: ${productResponse.status}`);
@@ -111,38 +192,37 @@ export async function compositeImage(
   const productArrayBuffer = await productResponse.arrayBuffer();
   const productBuffer = Buffer.from(productArrayBuffer);
 
-  // Resize product image to fit within the center of the canvas
-  const productMaxWidth = Math.round(OUTPUT_WIDTH * 0.45);
-  const productMaxHeight = Math.round(OUTPUT_HEIGHT * 0.6);
-  const resizedProduct = await sharp(productBuffer)
-    .resize(productMaxWidth, productMaxHeight, { fit: "inside" })
+  const transparentProduct = await removeWhiteBackground(productBuffer);
+
+  const scale = (layout.product_scale ?? 75) / 100;
+  const productMaxSize = Math.round(OUTPUT_SIZE * scale);
+  const resizedProduct = await sharp(transparentProduct)
+    .resize(productMaxSize, productMaxSize, { fit: "inside" })
     .png()
     .toBuffer();
 
   const productMeta = await sharp(resizedProduct).metadata();
-  const productW = productMeta.width || productMaxWidth;
-  const productH = productMeta.height || productMaxHeight;
+  const productW = productMeta.width || productMaxSize;
+  const productH = productMeta.height || productMaxSize;
 
-  // 2. Resize background to target dimensions
-  const resizedBackground = await sharp(backgroundBuffer)
-    .resize(OUTPUT_WIDTH, OUTPUT_HEIGHT, { fit: "cover" })
-    .png()
-    .toBuffer();
+  const backgroundPng = renderBrandedBackground(brand, layout);
+  const background = await sharp(backgroundPng).png().toBuffer();
 
-  // 3. Composite product onto background (centered)
-  const productLeft = Math.round((OUTPUT_WIDTH - productW) / 2);
-  const productTop = Math.round((OUTPUT_HEIGHT - productH) / 2) - 30;
+  const productLeft = getProductLeft(
+    layout.product_alignment,
+    productW,
+    layout.split_position
+  );
+  const productTop = Math.round((OUTPUT_SIZE - productH) / 2);
 
-  // 4. Render text overlay
   const fontFamily = registerBrandFont(brand);
-  const textOverlay = renderTextOverlay(marketingCopy, brand, fontFamily);
+  const textOverlay = renderTextOverlay(marketingCopy, brand, layout, fontFamily);
 
-  // 5. Final composite: background + product + text
-  const finalImage = await sharp(resizedBackground)
+  const finalImage = await sharp(background)
     .composite([
       {
         input: resizedProduct,
-        left: productLeft,
+        left: Math.max(0, productLeft),
         top: Math.max(0, productTop),
       },
       {
@@ -156,6 +236,6 @@ export async function compositeImage(
 
   return {
     finalImage,
-    backgroundImage: resizedBackground,
+    backgroundImage: background,
   };
 }

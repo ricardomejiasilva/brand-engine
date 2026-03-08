@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import {
-  generateMarketingCopy,
-  generateBackgroundPrompt,
-} from "@/lib/ai/text-generator";
-import { generateBackground } from "@/lib/ai/image-generator";
+import { generateCreative } from "@/lib/ai/text-generator";
 import { compositeImage } from "@/lib/compositor";
 import { BrandParameters, GenerateRequest, GenerateResponse } from "@/types";
 
@@ -19,7 +15,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 1. Fetch brand parameters from Supabase
     const supabase = await createClient();
     const { data: brand, error: brandError } = await supabase
       .from("brand_parameters")
@@ -39,21 +34,16 @@ export async function POST(request: NextRequest) {
 
     const brandParams = brand as BrandParameters;
 
-    // 2. Generate marketing copy and background prompt in parallel
-    const [marketingCopy, backgroundPrompt] = await Promise.all([
-      generateMarketingCopy(productData, brandParams),
-      generateBackgroundPrompt(productData, brandParams),
-    ]);
+    const { marketingCopy, layout } = await generateCreative(
+      productData,
+      brandParams
+    );
 
-    // 3. Generate background image with Nano Banana
-    const backgroundBuffer = await generateBackground(backgroundPrompt);
-
-    // 4. Composite the final image
     const { finalImage, backgroundImage } = await compositeImage(
       productData.imageUrl,
-      backgroundBuffer,
       marketingCopy,
-      brandParams
+      brandParams,
+      layout
     );
 
     return NextResponse.json<GenerateResponse>({

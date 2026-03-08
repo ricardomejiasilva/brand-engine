@@ -19,16 +19,23 @@ export async function GET() {
 // POST create a new brand
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const { brand_name, font_family, primary_color, background_vibe_description, surface_material } = body;
+  const {
+    brand_name, font_family, primary_color, secondary_color,
+    text_style, background_vibe_description, surface_material,
+  } = body;
 
-  if (!brand_name || !font_family || !primary_color || !background_vibe_description || !surface_material) {
+  if (!brand_name || !font_family || !primary_color || !secondary_color || !background_vibe_description || !surface_material) {
     return NextResponse.json({ error: "All fields are required." }, { status: 400 });
   }
 
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("brand_parameters")
-    .insert({ brand_name, font_family, primary_color, background_vibe_description, surface_material })
+    .insert({
+      brand_name, font_family, primary_color, secondary_color,
+      text_style: text_style ?? "italic bold",
+      background_vibe_description, surface_material,
+    })
     .select()
     .single();
 
