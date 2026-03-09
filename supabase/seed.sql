@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS brand_parameters (
   badge_style TEXT DEFAULT 'circle',
   allowed_template_families JSONB DEFAULT '["hero-split","hero-minimal","feature-badge","dimension-spec","icon-strip","editorial"]'::jsonb,
   custom_parameters JSONB DEFAULT '{}'::jsonb,
+  sample_image_urls JSONB DEFAULT '[]'::jsonb,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -36,11 +37,12 @@ DO $$ BEGIN
   ALTER TABLE brand_parameters ADD COLUMN IF NOT EXISTS accent_line_style TEXT DEFAULT 'thin';
   ALTER TABLE brand_parameters ADD COLUMN IF NOT EXISTS badge_style TEXT DEFAULT 'circle';
   ALTER TABLE brand_parameters ADD COLUMN IF NOT EXISTS allowed_template_families JSONB DEFAULT '["hero-split","hero-minimal","feature-badge","dimension-spec","icon-strip","editorial"]'::jsonb;
+  ALTER TABLE brand_parameters ADD COLUMN IF NOT EXISTS sample_image_urls JSONB DEFAULT '[]'::jsonb;
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
 
 -- Seed data
-INSERT INTO brand_parameters (brand_name, font_family, primary_color, secondary_color, background_vibe_description, surface_material, logo_url, design_tone, copy_tone)
+INSERT INTO brand_parameters (brand_name, font_family, primary_color, secondary_color, background_vibe_description, surface_material, logo_url, design_tone, copy_tone, sample_image_urls)
 VALUES
   (
     'Acopa',
@@ -51,7 +53,8 @@ VALUES
     'clean white',
     '/logos/acopa.png',
     'premium',
-    'elevated'
+    'elevated',
+    '["/brand-samples/acopa/acopa-sample-1.png","/brand-samples/acopa/acopa-sample-2.png","/brand-samples/acopa/acopa-sample-3.png"]'::jsonb
   ),
   (
     'Vigor',
@@ -74,3 +77,8 @@ VALUES
     'balanced'
   )
 ON CONFLICT (brand_name) DO NOTHING;
+
+-- Backfill sample images for existing Acopa row
+UPDATE brand_parameters
+SET sample_image_urls = '["/brand-samples/acopa/acopa-sample-1.png","/brand-samples/acopa/acopa-sample-2.png","/brand-samples/acopa/acopa-sample-3.png"]'::jsonb
+WHERE brand_name = 'Acopa' AND (sample_image_urls IS NULL OR sample_image_urls = '[]'::jsonb);

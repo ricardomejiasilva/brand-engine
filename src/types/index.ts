@@ -33,6 +33,7 @@ export interface BrandParameters {
   accent_line_style?: AccentLineStyle;
   badge_style?: BadgeShape;
   allowed_template_families?: TemplateFamily[];
+  sample_image_urls?: string[];
   custom_parameters: Record<string, string>;
   created_at: string;
 }

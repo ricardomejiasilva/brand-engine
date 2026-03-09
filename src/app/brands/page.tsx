@@ -66,6 +66,8 @@ export default function BrandsPage() {
   const [editingBrand, setEditingBrand] = useState<BrandParameters | null>(null);
   const [form, setForm] = useState<BrandForm>({ ...DEFAULT_FORM });
   const [customParams, setCustomParams] = useState<{ key: string; value: string }[]>([]);
+  const [sampleImageUrls, setSampleImageUrls] = useState<string[]>([]);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -80,6 +82,7 @@ export default function BrandsPage() {
   function resetForm() {
     setForm({ ...DEFAULT_FORM });
     setCustomParams([]);
+    setSampleImageUrls([]);
     setEditingBrand(null);
   }
 
@@ -106,6 +109,7 @@ export default function BrandsPage() {
     });
     const cp = brand.custom_parameters || {};
     setCustomParams(Object.entries(cp).map(([key, value]) => ({ key, value })));
+    setSampleImageUrls(brand.sample_image_urls ?? []);
   }
 
   async function handleSave() {
@@ -120,6 +124,7 @@ export default function BrandsPage() {
       const payload: Record<string, unknown> = {
         ...form,
         custom_parameters,
+        sample_image_urls: sampleImageUrls,
         heading_font_family: form.heading_font_family || null,
         body_font_family: form.body_font_family || null,
         accent_color: form.accent_color || null,
@@ -146,6 +151,28 @@ export default function BrandsPage() {
       setError("Network error saving brand.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSampleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingImage(true);
+    try {
+      const supabase = createClient();
+      const brandSlug = (form.brand_name || editingBrand?.brand_name || "brand").toLowerCase().replace(/\s+/g, "-");
+      const fileName = `${brandSlug}/${Date.now()}-${file.name}`;
+      const { error: uploadError } = await supabase.storage
+        .from("brand-samples")
+        .upload(fileName, file, { upsert: true });
+      if (uploadError) throw uploadError;
+      const { data } = supabase.storage.from("brand-samples").getPublicUrl(fileName);
+      setSampleImageUrls((prev) => [...prev, data.publicUrl]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to upload image.");
+    } finally {
+      setUploadingImage(false);
+      e.target.value = "";
     }
   }
 
@@ -383,6 +410,45 @@ export default function BrandsPage() {
               ))}
             </div>
             <button type="button" onClick={() => setCustomParams([...customParams, { key: "", value: "" }])} className="text-xs text-foreground/50 hover:text-foreground">+ Add Parameter</button>
+          </div>
+
+          {/* Reference Images */}
+          <h3 className="text-xs font-medium text-foreground/40 uppercase tracking-wider mb-3">Reference Images</h3>
+          <div className="mb-6">
+            <p className="text-xs text-foreground/40 mb-3">
+              Upload 2–4 high-quality marketing images that define this brand's design system. Gemini will use these as style references when generating new assets.
+            </p>
+            {sampleImageUrls.length > 0 && (
+              <div className="flex flex-wrap gap-3 mb-3">
+                {sampleImageUrls.map((url, i) => (
+                  <div key={i} className="relative group">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={url}
+                      alt={`Sample ${i + 1}`}
+                      className="h-24 w-24 rounded-lg border border-foreground/10 object-cover bg-foreground/5"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setSampleImageUrls((prev) => prev.filter((_, j) => j !== i))}
+                      className="absolute -top-1.5 -right-1.5 rounded-full bg-background border border-foreground/20 w-5 h-5 flex items-center justify-center text-foreground/50 hover:text-foreground text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <label className={`inline-flex items-center gap-2 rounded-lg border border-foreground/15 px-4 py-2 text-sm text-foreground/60 hover:text-foreground cursor-pointer transition-colors ${uploadingImage ? "opacity-40 pointer-events-none" : ""}`}>
+              {uploadingImage ? "Uploading..." : "+ Add Reference Image"}
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleSampleImageUpload}
+                disabled={uploadingImage}
+              />
+            </label>
           </div>
 
           {/* Actions */}
