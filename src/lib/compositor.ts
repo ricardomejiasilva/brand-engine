@@ -33,22 +33,62 @@ async function removeWhiteBackground(imageBuffer: Buffer): Promise<Buffer> {
     .toBuffer({ resolveWithObject: true });
 
   const { width, height, channels } = info;
-  const threshold = 235;
-  const softEdge = 20;
 
-  for (let i = 0; i < data.length; i += channels) {
-    const r = data[i];
-    const g = data[i + 1];
-    const b = data[i + 2];
-    const minChannel = Math.min(r, g, b);
+  // High threshold: only catch near-pure white (background), not product near-whites
+  const threshold = 248;
+  const softEdge = 8;
 
-    if (minChannel >= threshold) {
-      data[i + 3] = 0;
-    } else if (minChannel >= threshold - softEdge) {
-      const opacity = Math.round(
-        ((threshold - minChannel) / softEdge) * 255
-      );
-      data[i + 3] = Math.min(data[i + 3], opacity);
+  function pixelIndex(x: number, y: number) {
+    return (y * width + x) * channels;
+  }
+
+  function isBackground(x: number, y: number): boolean {
+    const i = pixelIndex(x, y);
+    return (
+      data[i]     >= threshold - softEdge &&
+      data[i + 1] >= threshold - softEdge &&
+      data[i + 2] >= threshold - softEdge
+    );
+  }
+
+  // Flood-fill from all 4 borders — only spreads through near-white pixels
+  const visited = new Uint8Array(width * height);
+  const queue: number[] = [];
+
+  function enqueue(x: number, y: number) {
+    if (x < 0 || x >= width || y < 0 || y >= height) return;
+    const idx = y * width + x;
+    if (visited[idx] || !isBackground(x, y)) return;
+    visited[idx] = 1;
+    queue.push(x, y);
+  }
+
+  for (let x = 0; x < width; x++) { enqueue(x, 0); enqueue(x, height - 1); }
+  for (let y = 0; y < height; y++) { enqueue(0, y); enqueue(width - 1, y); }
+
+  let head = 0;
+  while (head < queue.length) {
+    const x = queue[head++];
+    const y = queue[head++];
+    enqueue(x + 1, y);
+    enqueue(x - 1, y);
+    enqueue(x, y + 1);
+    enqueue(x, y - 1);
+  }
+
+  // Apply transparency only to flood-fill visited pixels
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (!visited[y * width + x]) continue;
+      const i = pixelIndex(x, y);
+      const minChannel = Math.min(data[i], data[i + 1], data[i + 2]);
+      if (minChannel >= threshold) {
+        data[i + 3] = 0;
+      } else {
+        // Soft fade on the fringe
+        const opacity = Math.round(((minChannel - (threshold - softEdge)) / softEdge) * 255);
+        data[i + 3] = Math.min(data[i + 3], Math.max(0, opacity));
+      }
     }
   }
 
